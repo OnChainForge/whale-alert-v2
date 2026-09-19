@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whale Alert · Ethereum</title>
+  <style>
+:root {
+  --bg: #0b0d10;
+  --panel: #12161c;
+  --panel-border: #1f2530;
+  --panel-border-soft: #1a1f28;
+  --text: #e7ebee;
+  --muted: #838d99;
+  --muted-dim: #596270;
+
+  --accent: #37c98f;
+  --top: #e0a940;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+
+  --font-body: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.stage {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.panel {
+  width: 100%;
+  max-width: 600px;
+}
+
+/* ---------- Ambient status header ---------- */
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px 16px;
+}
+
+.status__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status.is-offline .status__dot {
+  background: var(--muted-dim);
+  animation: none;
+}
+
+.status.is-offline .status__left {
+  color: #e2574f;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.status__block {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.status__updated {
+  font-size: 12px;
+  color: var(--muted-dim);
+  flex-shrink: 0;
+}
+
+/* ---------- Feed ---------- */
+
+.feed {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.feed__empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--muted-dim);
+  font-size: 13px;
+  background: var(--panel);
+}
+
+.row {
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border-soft);
+  padding: 14px 18px;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row.is-top {
+  border-left: 2px solid var(--top);
+}
+
+.row.is-new {
+  animation: arrive 1.6s ease-out;
+}
+
+@keyframes arrive {
+  0% { background: rgba(55, 201, 143, 0.14); }
+  100% { background: var(--panel); }
+}
+
+.row__main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.row__value-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.row__value {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.row__badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: rgba(224, 169, 64, 0.14);
+  color: var(--top);
+  flex-shrink: 0;
+}
+
+.row__meta-right {
+  font-size: 12px;
+  color: var(--muted-dim);
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.row__addresses {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__link {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.row__link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.row__arrow {
+  color: var(--muted-dim);
+  padding: 0 4px;
+}
+
+.row__sub {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted-dim);
+  display: flex;
+  gap: 10px;
+}
+
+.row__sub .row__link {
+  font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="panel">
+
+      <div class="status" id="status">
+        <div class="status__left">
+          <span class="status__dot" id="status-dot"></span>
+          <span id="status-text">Connecting…</span>
+        </div>
+        <span class="status__updated" id="status-updated"></span>
+      </div>
+
+      <div class="feed" id="feed">
+        <p class="feed__empty" id="feed-empty">Watching for whale-sized transfers…</p>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+// Point this to wherever your API runs (Whale Alert)
+const API_BASE = "http://localhost:8002";
+const POLL_INTERVAL_MS = 8000;
+const ETHERSCAN_BASE = "https://etherscan.io";
+
+const el = {
+  statusRoot: document.getElementById("status"),
+  statusText: document.getElementById("status-text"),
+  statusUpdated: document.getElementById("status-updated"),
+  feed: document.getElementById("feed"),
+  feedEmpty: document.getElementById("feed-empty"),
+};
+
+let lastUpdatedAt = null;
+const seenHashes = new Set();
+
+function truncateHash(hash) {
+  return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+}
+
+function truncateAddress(addr) {
+  if (!addr) return null;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function formatEth(value) {
+  const n = Number(value);
+  const formatted = n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return `${formatted} ETH`;
+}
+
+function timeAgo(date) {
+  if (!date) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (seconds < 5) return "updated just now";
+  if (seconds < 60) return `updated ${seconds}s ago`;
+  return `updated ${Math.round(seconds / 60)}m ago`;
+}
+
+function detectedAgo(isoString) {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(isoString).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  return `${Math.round(seconds / 3600)}h ago`;
+}
+
+function renderStatus() {
+  el.statusText.textContent = "Live — watching Ethereum";
+  el.statusUpdated.textContent = timeAgo(lastUpdatedAt);
+}
+
+function setOnline(isOnline) {
+  el.statusRoot.classList.toggle("is-offline", !isOnline);
+  if (!isOnline) {
+    el.statusText.textContent = "Disconnected — retrying…";
+  }
+}
+
+function etherscanLink(path, label, extraClass = "") {
+  return `<a class="row__link ${extraClass}" href="${ETHERSCAN_BASE}${path}" target="_blank" rel="noopener noreferrer" title="View on Etherscan">${label}</a>`;
+}
+
+function buildRow(alert, isNew, isTop) {
+  const row = document.createElement("div");
+  row.className = "row";
+  if (isTop) row.classList.add("is-top");
+  if (isNew) row.classList.add("is-new");
+
+  const fromLabel = truncateAddress(alert.from_address);
+  const toLabel = alert.to_address ? truncateAddress(alert.to_address) : "Contract creation";
+  const fromLink = etherscanLink(`/address/${alert.from_address}`, fromLabel);
+  const toLink = alert.to_address
+    ? etherscanLink(`/address/${alert.to_address}`, toLabel)
+    : `<span>${toLabel}</span>`;
+  const txLink = etherscanLink(`/tx/${alert.tx_hash}`, truncateHash(alert.tx_hash));
+  const blockLink = etherscanLink(`/block/${alert.block_number}`, `Block #${alert.block_number}`);
+
+  row.innerHTML = `
+    <div class="row__main">
+      <div class="row__value-line">
+        <span class="row__value" style="font-size:${alert.__fontSize}px">${formatEth(alert.value_eth)}</span>
+        ${isTop ? '<span class="row__badge">Largest right now</span>' : ""}
+      </div>
+      <span class="row__meta-right">${detectedAgo(alert.detected_at)}</span>
+    </div>
+    <div class="row__addresses">
+      ${fromLink}<span class="row__arrow">→</span>${toLink}
+    </div>
+    <div class="row__sub">
+      ${blockLink}
+      ${txLink}
+    </div>
+  `;
+
+  return row;
+}
+
+function renderFeed(alerts) {
+  el.feedEmpty.hidden = alerts.length > 0;
+  if (alerts.length === 0) return;
+
+  const maxValue = Math.max(...alerts.map((a) => a.value_eth));
+  const topId = alerts.reduce((top, a) => (a.value_eth > top.value_eth ? a : top), alerts[0]).id;
+
+  const MIN_PX = 16;
+  const MAX_PX = 28;
+
+  const fragment = document.createDocumentFragment();
+  alerts.forEach((alert) => {
+    const ratio = maxValue > 0 ? alert.value_eth / maxValue : 0;
+    alert.__fontSize = Math.round(MIN_PX + (MAX_PX - MIN_PX) * Math.sqrt(ratio));
+
+    const isNew = !seenHashes.has(alert.tx_hash);
+    seenHashes.add(alert.tx_hash);
+    fragment.append(buildRow(alert, isNew, alert.id === topId));
+  });
+
+  el.feed.innerHTML = "";
+  el.feed.append(el.feedEmpty, fragment);
+}
+
+async function poll() {
+  try {
+    const res = await fetch(`${API_BASE}/alerts/`);
+    if (!res.ok) throw new Error("Bad response");
+
+    const alerts = await res.json();
+    lastUpdatedAt = new Date();
+    setOnline(true);
+    renderFeed(alerts);
+    renderStatus();
+  } catch (err) {
+    setOnline(false);
+  }
+}
+
+poll();
+setInterval(poll, POLL_INTERVAL_MS);
+setInterval(() => {
+  el.statusUpdated.textContent = timeAgo(lastUpdatedAt);
+}, 1000);
+  </script>
+</body>
+</html>
