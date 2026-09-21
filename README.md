@@ -1,46 +1,94 @@
-# Whale Alert
+# Whale Alert v2.0
 
-A real-time Ethereum transaction listener microservice that monitors raw blocks for high-value ETH transfers ("whales"), uses Redis to perform atomic deduplication, persists transaction history, and exposes a REST API for real-time feed consumption.
-
-![Whale Alert screenshot](docs/screenshot.png)
-
-**Live demo:** _pending deployment_  
-**Video walkthrough:** _pending_
+Real-time detection of large Ethereum transactions ("whale" transactions) with atomic deduplication via Redis.
 
 ## Problem
 
-Scanning Ethereum mainnet blocks for massive transaction transfers generates high volumes of raw data. Without an efficient deduplication layer, background listeners risk persisting or broadcasting identical transaction events multiple times during re-scans or network delays.
+Large token/ETH movements often signal market-moving events (exchange deposits/withdrawals, OTC deals, whale accumulation). Manually watching a block explorer for these transactions is impractical, and naive polling approaches tend to fire duplicate alerts for the same transaction when data is refetched.
 
 ## Solution
 
-A FastAPI microservice that:
-
-1. Runs an asynchronous background polling task alongside the Web API
-2. Filters raw network transactions against a configurable ETH threshold
-3. Verifies transaction novelty using Redis key caching to eliminate duplicate events
-4. Persists verified whale transactions (`tx_hash`, `block_number`, `from_address`, `to_address`, `value_eth`, `detected_at`) in SQLite
-5. Exposes REST endpoints (`/health`, `/alerts/`) for frontend and client consumption
+A background listener continuously monitors new Ethereum blocks, filters transactions above a configurable ETH threshold (default: 50 ETH), and uses Redis' atomic `SETNX` operation to guarantee each qualifying transaction triggers exactly one alert — even under concurrent processing.
 
 ## Architecture
 
-Ethereum Network (RPC)│▼Background Polling Loop (app/listener.py)│┌────┴────────────────────────┐▼                             ▼Redis Deduplication Check    SQLite Persistence (whale_alerts)(dedup_health_check)              │▼FastAPI REST API (/alerts/)│▼Frontend Client Feed
-- **Backend**: Python, FastAPI, SQLAlchemy, Pydantic v2
-- **Cache / Deduplication**: Redis
-- **Database**: SQLite
-- **Frontend**: Vanilla HTML/JS
+┌─────────────┐ ┌──────────────┐ ┌───────────────┐
+│ Ethereum │ │ Listener │ │ Redis │
+│ (Infura RPC)│─────▶│ (background │─────▶│ SETNX dedup │
+│ │ │ asyncio │ │ (atomic check) │
+└─────────────┘ │ loop) │ └────────┬────────┘
+└──────┬────────┘ │
+│ │ new? → yes
+▼ ▼
+┌──────────────┐ ┌────────────────┐
+│ blockchain.py│ │ SQLite (WAL) │
+│ fetch_whale_ │────────▶│ alerts table │
+│ transactions │ └────────┬────────┘
+└──────────────┘ │
+▼
+┌────────────────┐
+│ FastAPI REST │
+│ /alerts │
+└────────┬────────┘
+│ polling
+▼
+┌────────────────┐
+│ Frontend (JS) │
+│ live feed │
+└────────────────┘
+
 
 ## Stack
 
-Python · FastAPI · SQLAlchemy · Pydantic · Redis · SQLite
+- **Backend:** FastAPI, SQLAlchemy, SQLite (WAL mode)
+- **Blockchain:** Web3.py via Infura RPC
+- **Deduplication:** Redis (`SETNX`)
+- **Frontend:** Vanilla HTML/CSS/JS, dark theme, polling-based
+- **Config:** pydantic-settings (`.env`)
 
 ## Running locally
 
+Requires Redis running:
 ```bash
+sudo service redis-server start
+```
+
+Backend:
+```bash
+cd whale-alert-v2
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # fill in ETHEREUM_RPC_URL and REDIS_URL
+cp .env.example .env   # fill in your Infura API key
 uvicorn app.main:app --reload --port 8002
-Frontend:Bashcd frontend
+```
+
+Frontend:
+```bash
+cd frontend
 python3 -m http.server 5502
-Open http://localhost:5502.APIMethodEndpointDescriptionGET/healthService health status and Redis connection verificationGET/alerts/Returns the 50 most recently detected whale transactionsTechnical decisionsPydantic v2 Object Relational Mapping: Configured ConfigDict(from_attributes=True) in response schemas (WhaleAlertOut) to seamlessly serialize SQLAlchemy model instances into JSON payloads.Atomic Indexing & Uniqueness: Explicitly indexed and constrained tx_hash at the database level (unique=True, index=True) alongside primary keys to enforce data integrity even under heavy ingestion.CORS Middleware Enablement: Standardized wildcards on origin access to decouple local static development servers from backend API services.Challenges & learningsHandled timezone awareness on record insertion by binding SQLAlchemy models to explicit UTC datetimes (datetime.now(timezone.utc)).Managed multi-service availability checks by validating Redis health status alongside standard application health endpoints.LicenseMIT
+```
+
+## API
+
+| Method | Endpoint         | Description                          |
+|--------|------------------|---------------------------------------|
+| GET    | `/alerts/`       | List detected whale transactions      |
+| GET    | `/alerts/{id}`   | Get a single alert by ID              |
+| GET    | `/health`        | Health check                          |
+
+## Technical decisions
+
+- **Why Redis SETNX over a DB unique constraint:** `SETNX` is atomic at the Redis level and avoids race conditions when multiple transactions in the same block are processed concurrently, without needing DB-level locking or catching integrity errors.
+- **Why a background listener instead of on-demand polling:** whale transactions need to be caught as they happen; on-demand analysis (as in Risk Monitoring Engine) doesn't fit a continuous-monitoring use case.
+- **Threshold as config, not hardcoded:** the 50 ETH threshold lives in `.env`, allowing tuning without code changes.
+- **SQLite over Postgres (local):** `psycopg2-binary` had build issues on Python 3.14 locally; SQLite in WAL mode is sufficient for this scale. Postgres is planned for the Render deployment.
+
+## Challenges & learnings
+
+- Initial version without Redis produced duplicate alerts when the same block was reprocessed after a listener restart — solved by persisting dedup keys in Redis instead of in-memory, so restarts don't lose dedup state.
+- Frontend font size scaling by relative transaction size required capping the scale factor, since occasional 1000+ ETH transactions were breaking the layout.
+
+## License
+
+MIT
