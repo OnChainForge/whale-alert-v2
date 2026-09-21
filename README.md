@@ -1,11 +1,10 @@
-cat > README.md << 'EOF'
 # Whale Alert
 
 A real-time Ethereum transaction listener microservice that monitors raw blocks for high-value ETH transfers ("whales"), uses Redis to perform atomic deduplication, persists transaction history, and exposes a REST API for real-time feed consumption.
 
 ![Whale Alert screenshot](docs/screenshot.png)
 
-**Live demo:** _pending deployment_
+**Live demo:** _pending deployment_  
 **Video walkthrough:** _pending_
 
 ## Problem
@@ -44,4 +43,4 @@ cp .env.example .env  # fill in ETHEREUM_RPC_URL and REDIS_URL
 uvicorn app.main:app --reload --port 8002
 Frontend:Bashcd frontend
 python3 -m http.server 5502
-Open http://localhost:5502.APIMethodEndpointDescriptionGET/healthService health status and Redis connection verificationGET/alerts/Returns the 50 most recently detected whale transactionsTechnical decisionsPydantic v2 Object Relational Mapping: Configured ConfigDict(from_attributes=True) in response schemas (WhaleAlertOut) to seamlessly serialize SQLAlchemy model instances into JSON payloads.Atomic Indexing & Uniqueness: Explicitly indexed and constrained tx_hash at the database level (unique=True, index=True) alongside primary keys to enforce data integrity even under heavy ingestion.CORS Middleware Enablement: Standardized wildcards on origin access to decouple local static development servers from backend API services.Challenges & learningsHandled timezone awareness on record insertion by binding SQLAlchemy models to explicit UTC datetimes (datetime.now(timezone.utc)).Managed multi-service availability checks by validating Redis health status alongside standard application health endpoints.LicenseMITEOF
+Open http://localhost:5502.APIMethodEndpointDescriptionGET/healthService health status and Redis connection verificationGET/alerts/Returns the 50 most recently detected whale transactionsTechnical decisionsPydantic v2 Object Relational Mapping: Configured ConfigDict(from_attributes=True) in response schemas (WhaleAlertOut) to seamlessly serialize SQLAlchemy model instances into JSON payloads.Atomic Indexing & Uniqueness: Explicitly indexed and constrained tx_hash at the database level (unique=True, index=True) alongside primary keys to enforce data integrity even under heavy ingestion.CORS Middleware Enablement: Standardized wildcards on origin access to decouple local static development servers from backend API services.Challenges & learningsHandled timezone awareness on record insertion by binding SQLAlchemy models to explicit UTC datetimes (datetime.now(timezone.utc)).Managed multi-service availability checks by validating Redis health status alongside standard application health endpoints.LicenseMIT
