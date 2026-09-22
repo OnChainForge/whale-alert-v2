@@ -2,6 +2,8 @@
 
 Real-time detection of large Ethereum transactions ("whale" transactions) with atomic deduplication via Redis.
 
+![Whale Alert screenshot](docs/screenshot.png)
+
 ## Problem
 
 Large token/ETH movements often signal market-moving events (exchange deposits/withdrawals, OTC deals, whale accumulation). Manually watching a block explorer for these transactions is impractical, and naive polling approaches tend to fire duplicate alerts for the same transaction when data is refetched.
