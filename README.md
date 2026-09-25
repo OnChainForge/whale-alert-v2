@@ -4,6 +4,11 @@ Real-time detection of large Ethereum transactions ("whale" transactions) with a
 
 ![Whale Alert screenshot](docs/screenshot.png)
 
+📹 [Watch demo video](https://youtu.be/1uu52D18Oqc)
+
+**Live demo:** https://whale-alert-v2.onrender.com  
+**Backend API:** https://whale-alert-fgjj.onrender.com/docs
+
 ## Problem
 
 Large token/ETH movements often signal market-moving events (exchange deposits/withdrawals, OTC deals, whale accumulation). Manually watching a block explorer for these transactions is impractical, and naive polling approaches tend to fire duplicate alerts for the same transaction when data is refetched.
@@ -57,7 +62,7 @@ sudo service redis-server start
 
 Backend:
 ```bash
-cd whale-alert-v2
+cd whale-alert
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
